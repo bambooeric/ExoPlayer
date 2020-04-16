@@ -15,13 +15,12 @@
  */
 package com.google.android.exoplayer2.drm;
 
+import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.util.Assertions;
 import java.util.Map;
 
-/**
- * A {@link DrmSession} that's in a terminal error state.
- */
-/* package */ final class ErrorStateDrmSession<T extends ExoMediaCrypto> implements DrmSession<T> {
+/** A {@link DrmSession} that's in a terminal error state. */
+public final class ErrorStateDrmSession<T extends ExoMediaCrypto> implements DrmSession<T> {
 
   private final DrmSessionException error;
 
@@ -35,23 +34,41 @@ import java.util.Map;
   }
 
   @Override
+  public boolean playClearSamplesWithoutKeys() {
+    return false;
+  }
+
+  @Override
+  @Nullable
   public DrmSessionException getError() {
     return error;
   }
 
   @Override
+  @Nullable
   public T getMediaCrypto() {
     return null;
   }
 
   @Override
+  @Nullable
   public Map<String, String> queryKeyStatus() {
     return null;
   }
 
   @Override
+  @Nullable
   public byte[] getOfflineLicenseKeySetId() {
     return null;
   }
 
+  @Override
+  public void acquire() {
+    // Do nothing.
+  }
+
+  @Override
+  public void release() {
+    // Do nothing.
+  }
 }

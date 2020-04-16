@@ -16,9 +16,8 @@
 package com.google.android.exoplayer2.testutil;
 
 import android.os.Handler;
-import android.support.annotation.Nullable;
-import android.util.Log;
 import android.view.Surface;
+import androidx.annotation.Nullable;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.ExoPlaybackException;
 import com.google.android.exoplayer2.ExoPlayer;
@@ -28,20 +27,22 @@ import com.google.android.exoplayer2.PlayerMessage;
 import com.google.android.exoplayer2.PlayerMessage.Target;
 import com.google.android.exoplayer2.SimpleExoPlayer;
 import com.google.android.exoplayer2.Timeline;
+import com.google.android.exoplayer2.audio.AudioAttributes;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.testutil.ActionSchedule.ActionNode;
 import com.google.android.exoplayer2.testutil.ActionSchedule.PlayerRunnable;
 import com.google.android.exoplayer2.testutil.ActionSchedule.PlayerTarget;
-import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
+import com.google.android.exoplayer2.trackselection.DefaultTrackSelector.Parameters;
+import com.google.android.exoplayer2.util.ConditionVariable;
 import com.google.android.exoplayer2.util.HandlerWrapper;
+import com.google.android.exoplayer2.util.Log;
 
-/**
- * Base class for actions to perform during playback tests.
- */
+/** Base class for actions to perform during playback tests. */
 public abstract class Action {
 
   private final String tag;
-  private final @Nullable String description;
+  @Nullable private final String description;
 
   /**
    * @param tag A tag to use for logging.
@@ -64,7 +65,7 @@ public abstract class Action {
    */
   public final void doActionAndScheduleNext(
       SimpleExoPlayer player,
-      MappingTrackSelector trackSelector,
+      DefaultTrackSelector trackSelector,
       Surface surface,
       HandlerWrapper handler,
       ActionNode nextAction) {
@@ -75,7 +76,7 @@ public abstract class Action {
   }
 
   /**
-   * Called by {@link #doActionAndScheduleNext(SimpleExoPlayer, MappingTrackSelector, Surface,
+   * Called by {@link #doActionAndScheduleNext(SimpleExoPlayer, DefaultTrackSelector, Surface,
    * HandlerWrapper, ActionNode)} to perform the action and to schedule the next action node.
    *
    * @param player The player to which the action should be applied.
@@ -86,7 +87,7 @@ public abstract class Action {
    */
   protected void doActionAndScheduleNextImpl(
       SimpleExoPlayer player,
-      MappingTrackSelector trackSelector,
+      DefaultTrackSelector trackSelector,
       Surface surface,
       HandlerWrapper handler,
       ActionNode nextAction) {
@@ -97,7 +98,7 @@ public abstract class Action {
   }
 
   /**
-   * Called by {@link #doActionAndScheduleNextImpl(SimpleExoPlayer, MappingTrackSelector, Surface,
+   * Called by {@link #doActionAndScheduleNextImpl(SimpleExoPlayer, DefaultTrackSelector, Surface,
    * HandlerWrapper, ActionNode)} to perform the action.
    *
    * @param player The player to which the action should be applied.
@@ -105,11 +106,9 @@ public abstract class Action {
    * @param surface The surface to use when applying actions.
    */
   protected abstract void doActionImpl(
-      SimpleExoPlayer player, MappingTrackSelector trackSelector, Surface surface);
+      SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface);
 
-  /**
-   * Calls {@link Player#seekTo(long)} or {@link Player#seekTo(int, long)}.
-   */
+  /** Calls {@link Player#seekTo(long)} or {@link Player#seekTo(int, long)}. */
   public static final class Seek extends Action {
 
     private final Integer windowIndex;
@@ -141,20 +140,17 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       if (windowIndex == null) {
         player.seekTo(positionMs);
       } else {
         player.seekTo(windowIndex, positionMs);
       }
     }
-
   }
 
-  /**
-   * Calls {@link Player#stop()} or {@link Player#stop(boolean)}.
-   */
+  /** Calls {@link Player#stop()} or {@link Player#stop(boolean)}. */
   public static final class Stop extends Action {
 
     private static final String STOP_ACTION_TAG = "Stop";
@@ -183,21 +179,17 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       if (reset == null) {
         player.stop();
       } else {
         player.stop(reset);
       }
-
     }
-
   }
 
-  /**
-   * Calls {@link Player#setPlayWhenReady(boolean)}.
-   */
+  /** Calls {@link Player#setPlayWhenReady(boolean)}. */
   public static final class SetPlayWhenReady extends Action {
 
     private final boolean playWhenReady;
@@ -212,15 +204,16 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.setPlayWhenReady(playWhenReady);
     }
 
   }
 
   /**
-   * Calls {@link MappingTrackSelector#setRendererDisabled(int, boolean)}.
+   * Updates the {@link Parameters} of a {@link DefaultTrackSelector} to specify whether the
+   * renderer at a given index should be disabled.
    */
   public static final class SetRendererDisabled extends Action {
 
@@ -239,56 +232,69 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
-      trackSelector.setRendererDisabled(rendererIndex, disabled);
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
+      trackSelector.setParameters(
+          trackSelector.buildUponParameters().setRendererDisabled(rendererIndex, disabled));
     }
-
   }
 
-  /**
-   * Calls {@link SimpleExoPlayer#clearVideoSurface()}.
-   */
+  /** Calls {@link SimpleExoPlayer#clearVideoSurface()}. */
   public static final class ClearVideoSurface extends Action {
 
-    /**
-     * @param tag A tag to use for logging.
-     */
+    /** @param tag A tag to use for logging. */
     public ClearVideoSurface(String tag) {
       super(tag, "ClearVideoSurface");
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.clearVideoSurface();
     }
-
   }
 
-  /**
-   * Calls {@link SimpleExoPlayer#setVideoSurface(Surface)}.
-   */
+  /** Calls {@link SimpleExoPlayer#setVideoSurface(Surface)}. */
   public static final class SetVideoSurface extends Action {
 
-    /**
-     * @param tag A tag to use for logging.
-     */
+    /** @param tag A tag to use for logging. */
     public SetVideoSurface(String tag) {
       super(tag, "SetVideoSurface");
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.setVideoSurface(surface);
     }
-
   }
 
-  /**
-   * Calls {@link ExoPlayer#prepare(MediaSource)}.
-   */
+  /** Calls {@link SimpleExoPlayer#setAudioAttributes(AudioAttributes, boolean)}. */
+  public static final class SetAudioAttributes extends Action {
+
+    private final AudioAttributes audioAttributes;
+    private final boolean handleAudioFocus;
+
+    /**
+     * @param tag A tag to use for logging.
+     * @param audioAttributes The attributes to use for audio playback.
+     * @param handleAudioFocus True if the player should handle audio focus, false otherwise.
+     */
+    public SetAudioAttributes(
+        String tag, AudioAttributes audioAttributes, boolean handleAudioFocus) {
+      super(tag, "SetAudioAttributes");
+      this.audioAttributes = audioAttributes;
+      this.handleAudioFocus = handleAudioFocus;
+    }
+
+    @Override
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
+      player.setAudioAttributes(audioAttributes, handleAudioFocus);
+    }
+  }
+
+  /** Calls {@link ExoPlayer#prepare(MediaSource)}. */
   public static final class PrepareSource extends Action {
 
     private final MediaSource mediaSource;
@@ -297,6 +303,7 @@ public abstract class Action {
 
     /**
      * @param tag A tag to use for logging.
+     * @param mediaSource The {@link MediaSource} to prepare the player with.
      */
     public PrepareSource(String tag, MediaSource mediaSource) {
       this(tag, mediaSource, true, true);
@@ -304,9 +311,11 @@ public abstract class Action {
 
     /**
      * @param tag A tag to use for logging.
+     * @param mediaSource The {@link MediaSource} to prepare the player with.
+     * @param resetPosition Whether the player's position should be reset.
      */
-    public PrepareSource(String tag, MediaSource mediaSource, boolean resetPosition,
-        boolean resetState) {
+    public PrepareSource(
+        String tag, MediaSource mediaSource, boolean resetPosition, boolean resetState) {
       super(tag, "PrepareSource");
       this.mediaSource = mediaSource;
       this.resetPosition = resetPosition;
@@ -314,22 +323,20 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.prepare(mediaSource, resetPosition, resetState);
     }
-
   }
 
-  /**
-   * Calls {@link Player#setRepeatMode(int)}.
-   */
+  /** Calls {@link Player#setRepeatMode(int)}. */
   public static final class SetRepeatMode extends Action {
 
     private final @Player.RepeatMode int repeatMode;
 
     /**
      * @param tag A tag to use for logging.
+     * @param repeatMode The repeat mode.
      */
     public SetRepeatMode(String tag, @Player.RepeatMode int repeatMode) {
       super(tag, "SetRepeatMode:" + repeatMode);
@@ -337,22 +344,20 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.setRepeatMode(repeatMode);
     }
-
   }
 
-  /**
-   * Calls {@link Player#setShuffleModeEnabled(boolean)}.
-   */
+  /** Calls {@link Player#setShuffleModeEnabled(boolean)}. */
   public static final class SetShuffleModeEnabled extends Action {
 
     private final boolean shuffleModeEnabled;
 
     /**
      * @param tag A tag to use for logging.
+     * @param shuffleModeEnabled Whether shuffling is enabled.
      */
     public SetShuffleModeEnabled(String tag, boolean shuffleModeEnabled) {
       super(tag, "SetShuffleModeEnabled:" + shuffleModeEnabled);
@@ -360,8 +365,8 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.setShuffleModeEnabled(shuffleModeEnabled);
     }
   }
@@ -407,7 +412,7 @@ public abstract class Action {
 
     @Override
     protected void doActionImpl(
-        final SimpleExoPlayer player, MappingTrackSelector trackSelector, Surface surface) {
+        final SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       if (target instanceof PlayerTarget) {
         ((PlayerTarget) target).setPlayer(player);
       }
@@ -423,9 +428,7 @@ public abstract class Action {
     }
   }
 
-  /**
-   * Calls {@link Player#setPlaybackParameters(PlaybackParameters)}.
-   */
+  /** Calls {@link Player#setPlaybackParameters(PlaybackParameters)}. */
   public static final class SetPlaybackParameters extends Action {
 
     private final PlaybackParameters playbackParameters;
@@ -440,8 +443,8 @@ public abstract class Action {
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player.setPlaybackParameters(playbackParameters);
     }
 
@@ -463,15 +466,11 @@ public abstract class Action {
 
     @Override
     protected void doActionImpl(
-        SimpleExoPlayer player, MappingTrackSelector trackSelector, Surface surface) {
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       player
           .createMessage(
-              new Target() {
-                @Override
-                public void handleMessage(int messageType, Object payload)
-                    throws ExoPlaybackException {
-                  throw exception;
-                }
+              (messageType, payload) -> {
+                throw exception;
               })
           .send();
     }
@@ -500,18 +499,26 @@ public abstract class Action {
     @Override
     protected void doActionAndScheduleNextImpl(
         final SimpleExoPlayer player,
-        final MappingTrackSelector trackSelector,
+        final DefaultTrackSelector trackSelector,
         final Surface surface,
         final HandlerWrapper handler,
         final ActionNode nextAction) {
-      // Schedule one message on the playback thread to pause the player immediately.
+      Handler testThreadHandler = new Handler();
+      // Schedule a message on the playback thread to ensure the player is paused immediately.
       player
           .createMessage(
-              new Target() {
-                @Override
-                public void handleMessage(int messageType, Object payload)
-                    throws ExoPlaybackException {
-                  player.setPlayWhenReady(/* playWhenReady= */ false);
+              (messageType, payload) -> {
+                // Block playback thread until pause command has been sent from test thread.
+                ConditionVariable blockPlaybackThreadCondition = new ConditionVariable();
+                testThreadHandler.post(
+                    () -> {
+                      player.setPlayWhenReady(/* playWhenReady= */ false);
+                      blockPlaybackThreadCondition.open();
+                    });
+                try {
+                  blockPlaybackThreadCondition.block();
+                } catch (InterruptedException e) {
+                  // Ignore.
                 }
               })
           .setPosition(windowIndex, positionMs)
@@ -519,37 +526,34 @@ public abstract class Action {
       // Schedule another message on this test thread to continue action schedule.
       player
           .createMessage(
-              new Target() {
-                @Override
-                public void handleMessage(int messageType, Object payload)
-                    throws ExoPlaybackException {
-                  nextAction.schedule(player, trackSelector, surface, handler);
-                }
-              })
+              (messageType, payload) ->
+                  nextAction.schedule(player, trackSelector, surface, handler))
           .setPosition(windowIndex, positionMs)
-          .setHandler(new Handler())
+          .setHandler(testThreadHandler)
           .send();
       player.setPlayWhenReady(true);
     }
 
     @Override
     protected void doActionImpl(
-        SimpleExoPlayer player, MappingTrackSelector trackSelector, Surface surface) {
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       // Not triggered.
     }
   }
 
-  /**
-   * Waits for {@link Player.EventListener#onTimelineChanged(Timeline, Object, int)}.
-   */
+  /** Waits for {@link Player.EventListener#onTimelineChanged(Timeline, int)}. */
   public static final class WaitForTimelineChanged extends Action {
 
-    private final Timeline expectedTimeline;
+    @Nullable private final Timeline expectedTimeline;
 
     /**
+     * Creates action waiting for a timeline change.
+     *
      * @param tag A tag to use for logging.
+     * @param expectedTimeline The expected timeline to wait for. If null, wait for any timeline
+     *     change.
      */
-    public WaitForTimelineChanged(String tag, Timeline expectedTimeline) {
+    public WaitForTimelineChanged(String tag, @Nullable Timeline expectedTimeline) {
       super(tag, "WaitForTimelineChanged");
       this.expectedTimeline = expectedTimeline;
     }
@@ -557,46 +561,42 @@ public abstract class Action {
     @Override
     protected void doActionAndScheduleNextImpl(
         final SimpleExoPlayer player,
-        final MappingTrackSelector trackSelector,
+        final DefaultTrackSelector trackSelector,
         final Surface surface,
         final HandlerWrapper handler,
         final ActionNode nextAction) {
       if (nextAction == null) {
         return;
       }
-      Player.EventListener listener = new Player.DefaultEventListener() {
-        @Override
-        public void onTimelineChanged(Timeline timeline, Object manifest,
-            @Player.TimelineChangeReason int reason) {
-          if (timeline.equals(expectedTimeline)) {
-            player.removeListener(this);
-            nextAction.schedule(player, trackSelector, surface, handler);
-          }
-        }
-      };
+      Player.EventListener listener =
+          new Player.EventListener() {
+            @Override
+            public void onTimelineChanged(
+                Timeline timeline, @Player.TimelineChangeReason int reason) {
+              if (expectedTimeline == null || timeline.equals(expectedTimeline)) {
+                player.removeListener(this);
+                nextAction.schedule(player, trackSelector, surface, handler);
+              }
+            }
+          };
       player.addListener(listener);
-      if (player.getCurrentTimeline().equals(expectedTimeline)) {
+      if (expectedTimeline != null && player.getCurrentTimeline().equals(expectedTimeline)) {
         player.removeListener(listener);
         nextAction.schedule(player, trackSelector, surface, handler);
       }
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       // Not triggered.
     }
-
   }
 
-  /**
-   * Waits for {@link Player.EventListener#onPositionDiscontinuity(int)}.
-   */
+  /** Waits for {@link Player.EventListener#onPositionDiscontinuity(int)}. */
   public static final class WaitForPositionDiscontinuity extends Action {
 
-    /**
-     * @param tag A tag to use for logging.
-     */
+    /** @param tag A tag to use for logging. */
     public WaitForPositionDiscontinuity(String tag) {
       super(tag, "WaitForPositionDiscontinuity");
     }
@@ -604,33 +604,84 @@ public abstract class Action {
     @Override
     protected void doActionAndScheduleNextImpl(
         final SimpleExoPlayer player,
-        final MappingTrackSelector trackSelector,
+        final DefaultTrackSelector trackSelector,
         final Surface surface,
         final HandlerWrapper handler,
         final ActionNode nextAction) {
       if (nextAction == null) {
         return;
       }
-      player.addListener(new Player.DefaultEventListener() {
-        @Override
-        public void onPositionDiscontinuity(@Player.DiscontinuityReason int reason) {
-          player.removeListener(this);
-          nextAction.schedule(player, trackSelector, surface, handler);
-        }
-      });
+      player.addListener(
+          new Player.EventListener() {
+            @Override
+            public void onPositionDiscontinuity(@Player.DiscontinuityReason int reason) {
+              player.removeListener(this);
+              nextAction.schedule(player, trackSelector, surface, handler);
+            }
+          });
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       // Not triggered.
     }
-
   }
 
   /**
-   * Waits for a specified playback state, returning either immediately or after a call to
+   * Waits for a specified playWhenReady value, returning either immediately or after a call to
    * {@link Player.EventListener#onPlayerStateChanged(boolean, int)}.
+   */
+  public static final class WaitForPlayWhenReady extends Action {
+
+    private final boolean targetPlayWhenReady;
+
+    /**
+     * @param tag A tag to use for logging.
+     * @param playWhenReady The playWhenReady value to wait for.
+     */
+    public WaitForPlayWhenReady(String tag, boolean playWhenReady) {
+      super(tag, "WaitForPlayWhenReady");
+      targetPlayWhenReady = playWhenReady;
+    }
+
+    @Override
+    protected void doActionAndScheduleNextImpl(
+        SimpleExoPlayer player,
+        DefaultTrackSelector trackSelector,
+        Surface surface,
+        HandlerWrapper handler,
+        ActionNode nextAction) {
+      if (nextAction == null) {
+        return;
+      }
+      if (targetPlayWhenReady == player.getPlayWhenReady()) {
+        nextAction.schedule(player, trackSelector, surface, handler);
+      } else {
+        player.addListener(
+            new Player.EventListener() {
+              @Override
+              public void onPlayerStateChanged(
+                  boolean playWhenReady, @Player.State int playbackState) {
+                if (targetPlayWhenReady == playWhenReady) {
+                  player.removeListener(this);
+                  nextAction.schedule(player, trackSelector, surface, handler);
+                }
+              }
+            });
+      }
+    }
+
+    @Override
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
+      // Not triggered.
+    }
+  }
+
+  /**
+   * Waits for a specified playback state, returning either immediately or after a call to {@link
+   * Player.EventListener#onPlayerStateChanged(boolean, int)}.
    */
   public static final class WaitForPlaybackState extends Action {
 
@@ -638,6 +689,7 @@ public abstract class Action {
 
     /**
      * @param tag A tag to use for logging.
+     * @param targetPlaybackState The playback state to wait for.
      */
     public WaitForPlaybackState(String tag, int targetPlaybackState) {
       super(tag, "WaitForPlaybackState");
@@ -647,7 +699,7 @@ public abstract class Action {
     @Override
     protected void doActionAndScheduleNextImpl(
         final SimpleExoPlayer player,
-        final MappingTrackSelector trackSelector,
+        final DefaultTrackSelector trackSelector,
         final Surface surface,
         final HandlerWrapper handler,
         final ActionNode nextAction) {
@@ -657,34 +709,81 @@ public abstract class Action {
       if (targetPlaybackState == player.getPlaybackState()) {
         nextAction.schedule(player, trackSelector, surface, handler);
       } else {
-        player.addListener(new Player.DefaultEventListener() {
-          @Override
-          public void onPlayerStateChanged(boolean playWhenReady, int playbackState) {
-            if (targetPlaybackState == playbackState) {
-              player.removeListener(this);
-              nextAction.schedule(player, trackSelector, surface, handler);
-            }
-          }
-        });
+        player.addListener(
+            new Player.EventListener() {
+              @Override
+              public void onPlayerStateChanged(
+                  boolean playWhenReady, @Player.State int playbackState) {
+                if (targetPlaybackState == playbackState) {
+                  player.removeListener(this);
+                  nextAction.schedule(player, trackSelector, surface, handler);
+                }
+              }
+            });
       }
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       // Not triggered.
     }
-
   }
 
   /**
-   * Waits for {@link Player.EventListener#onSeekProcessed()}.
+   * Waits for a specified loading state, returning either immediately or after a call to {@link
+   * Player.EventListener#onLoadingChanged(boolean)}.
    */
-  public static final class WaitForSeekProcessed extends Action {
+  public static final class WaitForIsLoading extends Action {
+
+    private final boolean targetIsLoading;
 
     /**
      * @param tag A tag to use for logging.
+     * @param targetIsLoading The loading state to wait for.
      */
+    public WaitForIsLoading(String tag, boolean targetIsLoading) {
+      super(tag, "WaitForIsLoading");
+      this.targetIsLoading = targetIsLoading;
+    }
+
+    @Override
+    protected void doActionAndScheduleNextImpl(
+        final SimpleExoPlayer player,
+        final DefaultTrackSelector trackSelector,
+        final Surface surface,
+        final HandlerWrapper handler,
+        final ActionNode nextAction) {
+      if (nextAction == null) {
+        return;
+      }
+      if (targetIsLoading == player.isLoading()) {
+        nextAction.schedule(player, trackSelector, surface, handler);
+      } else {
+        player.addListener(
+            new Player.EventListener() {
+              @Override
+              public void onLoadingChanged(boolean isLoading) {
+                if (targetIsLoading == isLoading) {
+                  player.removeListener(this);
+                  nextAction.schedule(player, trackSelector, surface, handler);
+                }
+              }
+            });
+      }
+    }
+
+    @Override
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
+      // Not triggered.
+    }
+  }
+
+  /** Waits for {@link Player.EventListener#onSeekProcessed()}. */
+  public static final class WaitForSeekProcessed extends Action {
+
+    /** @param tag A tag to use for logging. */
     public WaitForSeekProcessed(String tag) {
       super(tag, "WaitForSeekProcessed");
     }
@@ -692,54 +791,48 @@ public abstract class Action {
     @Override
     protected void doActionAndScheduleNextImpl(
         final SimpleExoPlayer player,
-        final MappingTrackSelector trackSelector,
+        final DefaultTrackSelector trackSelector,
         final Surface surface,
         final HandlerWrapper handler,
         final ActionNode nextAction) {
       if (nextAction == null) {
         return;
       }
-      player.addListener(new Player.DefaultEventListener() {
-        @Override
-        public void onSeekProcessed() {
-          player.removeListener(this);
-          nextAction.schedule(player, trackSelector, surface, handler);
-        }
-      });
+      player.addListener(
+          new Player.EventListener() {
+            @Override
+            public void onSeekProcessed() {
+              player.removeListener(this);
+              nextAction.schedule(player, trackSelector, surface, handler);
+            }
+          });
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       // Not triggered.
     }
-
   }
 
-  /**
-   * Calls {@link Runnable#run()}.
-   */
+  /** Calls {@link Runnable#run()}. */
   public static final class ExecuteRunnable extends Action {
 
     private final Runnable runnable;
 
-    /**
-     * @param tag A tag to use for logging.
-     */
+    /** @param tag A tag to use for logging. */
     public ExecuteRunnable(String tag, Runnable runnable) {
       super(tag, "ExecuteRunnable");
       this.runnable = runnable;
     }
 
     @Override
-    protected void doActionImpl(SimpleExoPlayer player, MappingTrackSelector trackSelector,
-        Surface surface) {
+    protected void doActionImpl(
+        SimpleExoPlayer player, DefaultTrackSelector trackSelector, Surface surface) {
       if (runnable instanceof PlayerRunnable) {
         ((PlayerRunnable) runnable).setPlayer(player);
       }
       runnable.run();
     }
-
   }
-
 }

@@ -15,6 +15,8 @@
  */
 package com.google.android.exoplayer2.testutil;
 
+import androidx.annotation.Nullable;
+import com.google.android.exoplayer2.drm.DrmSessionManager;
 import com.google.android.exoplayer2.source.CompositeSequenceableLoader;
 import com.google.android.exoplayer2.source.MediaPeriod;
 import com.google.android.exoplayer2.source.MediaSourceEventListener.EventDispatcher;
@@ -24,20 +26,22 @@ import com.google.android.exoplayer2.source.TrackGroupArray;
 import com.google.android.exoplayer2.source.chunk.ChunkSampleStream;
 import com.google.android.exoplayer2.trackselection.TrackSelection;
 import com.google.android.exoplayer2.upstream.Allocator;
+import com.google.android.exoplayer2.upstream.DefaultLoadErrorHandlingPolicy;
+import com.google.android.exoplayer2.upstream.TransferListener;
 import com.google.android.exoplayer2.util.MimeTypes;
 import java.util.ArrayList;
 import java.util.List;
 
 /**
  * Fake {@link MediaPeriod} that provides tracks from the given {@link TrackGroupArray}. Selecting a
- * track will give the player a {@link ChunkSampleStream<FakeChunkSource>}.
+ * track will give the player a {@link ChunkSampleStream}.
  */
 public class FakeAdaptiveMediaPeriod extends FakeMediaPeriod
     implements SequenceableLoader.Callback<ChunkSampleStream<FakeChunkSource>> {
 
-  private final EventDispatcher eventDispatcher;
   private final Allocator allocator;
   private final FakeChunkSource.Factory chunkSourceFactory;
+  @Nullable private final TransferListener transferListener;
   private final long durationUs;
 
   private Callback callback;
@@ -49,21 +53,23 @@ public class FakeAdaptiveMediaPeriod extends FakeMediaPeriod
       EventDispatcher eventDispatcher,
       Allocator allocator,
       FakeChunkSource.Factory chunkSourceFactory,
-      long durationUs) {
-    super(trackGroupArray);
-    this.eventDispatcher = eventDispatcher;
+      long durationUs,
+      @Nullable TransferListener transferListener) {
+    super(trackGroupArray, eventDispatcher);
     this.allocator = allocator;
     this.chunkSourceFactory = chunkSourceFactory;
+    this.transferListener = transferListener;
     this.durationUs = durationUs;
     this.sampleStreams = newSampleStreamArray(0);
+    this.sequenceableLoader = new CompositeSequenceableLoader(new SequenceableLoader[0]);
   }
 
   @Override
   public void release() {
-    super.release();
     for (ChunkSampleStream<FakeChunkSource> sampleStream : sampleStreams) {
       sampleStream.release();
     }
+    super.release();
   }
 
   @Override
@@ -73,8 +79,13 @@ public class FakeAdaptiveMediaPeriod extends FakeMediaPeriod
   }
 
   @Override
-  public long selectTracks(TrackSelection[] selections, boolean[] mayRetainStreamFlags,
-      SampleStream[] streams, boolean[] streamResetFlags, long positionUs) {
+  @SuppressWarnings("unchecked")
+  public long selectTracks(
+      TrackSelection[] selections,
+      boolean[] mayRetainStreamFlags,
+      SampleStream[] streams,
+      boolean[] streamResetFlags,
+      long positionUs) {
     long returnPositionUs = super.selectTracks(selections, mayRetainStreamFlags, streams,
         streamResetFlags, positionUs);
     List<ChunkSampleStream<FakeChunkSource>> validStreams = new ArrayList<>();
@@ -129,17 +140,24 @@ public class FakeAdaptiveMediaPeriod extends FakeMediaPeriod
   }
 
   @Override
+  public boolean isLoading() {
+    return sequenceableLoader.isLoading();
+  }
+
+  @Override
   protected SampleStream createSampleStream(TrackSelection trackSelection) {
-    FakeChunkSource chunkSource = chunkSourceFactory.createChunkSource(trackSelection, durationUs);
+    FakeChunkSource chunkSource =
+        chunkSourceFactory.createChunkSource(trackSelection, durationUs, transferListener);
     return new ChunkSampleStream<>(
         MimeTypes.getTrackType(trackSelection.getSelectedFormat().sampleMimeType),
-        null,
-        null,
+        /* embeddedTrackTypes= */ null,
+        /* embeddedTrackFormats= */ null,
         chunkSource,
-        this,
+        /* callback= */ this,
         allocator,
-        0,
-        3,
+        /* positionUs= */ 0,
+        /* drmSessionManager= */ DrmSessionManager.getDummyDrmSessionManager(),
+        new DefaultLoadErrorHandlingPolicy(/* minimumLoadableRetryCount= */ 3),
         eventDispatcher);
   }
 
@@ -148,7 +166,8 @@ public class FakeAdaptiveMediaPeriod extends FakeMediaPeriod
     callback.onContinueLoadingRequested(this);
   }
 
-  @SuppressWarnings("unchecked")
+  // We won't assign the array to a variable that erases the generic type, and then write into it.
+  @SuppressWarnings({"unchecked", "rawtypes"})
   private static ChunkSampleStream<FakeChunkSource>[] newSampleStreamArray(int length) {
     return new ChunkSampleStream[length];
   }

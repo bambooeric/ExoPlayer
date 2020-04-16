@@ -5,7 +5,7 @@ seekMap:
 numberOfTracks = 1
 track 0:
   format:
-    bitrate = 768000
+    bitrate = 1536000
     id = null
     containerMimeType = null
     sampleMimeType = audio/raw
@@ -13,17 +13,18 @@ track 0:
     width = -1
     height = -1
     frameRate = -1.0
-    rotationDegrees = -1
-    pixelWidthHeightRatio = -1.0
+    rotationDegrees = 0
+    pixelWidthHeightRatio = 1.0
     channelCount = 2
     sampleRate = 48000
     pcmEncoding = 2
-    encoderDelay = -1
-    encoderPadding = -1
+    encoderDelay = 0
+    encoderPadding = 0
     subsampleOffsetUs = 9223372036854775807
     selectionFlags = 0
     language = null
     drmInitData = -
+    metadata = null
     initializationData:
   total output bytes = 526272
   sample count = 33

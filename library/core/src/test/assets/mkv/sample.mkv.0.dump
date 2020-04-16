@@ -1,6 +1,6 @@
 seekMap:
   isSeekable = true
-  duration = 1072000
+  duration = 1104000
   getPosition(0) = [[timeUs=67000, position=5576]]
 numberOfTracks = 2
 track 1:
@@ -13,17 +13,18 @@ track 1:
     width = 1080
     height = 720
     frameRate = -1.0
-    rotationDegrees = -1
+    rotationDegrees = 0
     pixelWidthHeightRatio = 1.0
     channelCount = -1
     sampleRate = -1
     pcmEncoding = -1
-    encoderDelay = -1
-    encoderPadding = -1
+    encoderDelay = 0
+    encoderPadding = 0
     subsampleOffsetUs = 9223372036854775807
     selectionFlags = 0
     language = null
     drmInitData = -
+    metadata = null
     initializationData:
       data = length 30, hash F6F3D010
       data = length 10, hash 7A0D0F2B
@@ -159,17 +160,18 @@ track 2:
     width = -1
     height = -1
     frameRate = -1.0
-    rotationDegrees = -1
-    pixelWidthHeightRatio = -1.0
+    rotationDegrees = 0
+    pixelWidthHeightRatio = 1.0
     channelCount = 1
     sampleRate = 44100
     pcmEncoding = -1
-    encoderDelay = -1
-    encoderPadding = -1
+    encoderDelay = 0
+    encoderPadding = 0
     subsampleOffsetUs = 9223372036854775807
     selectionFlags = 1
     language = und
     drmInitData = -
+    metadata = null
     initializationData:
   total output bytes = 12120
   sample count = 29

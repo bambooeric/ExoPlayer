@@ -22,10 +22,13 @@ import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.extractor.ExtractorInput;
 import com.google.android.exoplayer2.extractor.TrackOutput;
 import com.google.android.exoplayer2.util.ParsableByteArray;
+import com.google.android.exoplayer2.util.Util;
 import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * A fake {@link TrackOutput}.
@@ -42,7 +45,7 @@ public final class FakeTrackOutput implements TrackOutput, Dumper.Dumpable {
   public Format format;
 
   public FakeTrackOutput() {
-    sampleData = new byte[0];
+    sampleData = Util.EMPTY_BYTE_ARRAY;
     sampleTimesUs = new ArrayList<>();
     sampleFlags = new ArrayList<>();
     sampleStartOffsets = new ArrayList<>();
@@ -51,7 +54,7 @@ public final class FakeTrackOutput implements TrackOutput, Dumper.Dumpable {
   }
 
   public void clear() {
-    sampleData = new byte[0];
+    sampleData = Util.EMPTY_BYTE_ARRAY;
     sampleTimesUs.clear();
     sampleFlags.clear();
     sampleStartOffsets.clear();
@@ -90,6 +93,12 @@ public final class FakeTrackOutput implements TrackOutput, Dumper.Dumpable {
   @Override
   public void sampleMetadata(long timeUs, @C.BufferFlags int flags, int size, int offset,
       CryptoData cryptoData) {
+    if (format == null) {
+      throw new IllegalStateException("TrackOutput must receive format before sampleMetadata");
+    }
+    if (format.maxInputSize != Format.NO_VALUE && size > format.maxInputSize) {
+      throw new IllegalStateException("Sample size exceeds Format.maxInputSize");
+    }
     sampleTimesUs.add(timeUs);
     sampleFlags.add(flags);
     sampleStartOffsets.add(sampleData.length - offset - size);
@@ -114,6 +123,26 @@ public final class FakeTrackOutput implements TrackOutput, Dumper.Dumpable {
         sampleEndOffsets.get(index));
   }
 
+  public long getSampleTimeUs(int index) {
+    return sampleTimesUs.get(index);
+  }
+
+  public int getSampleFlags(int index) {
+    return sampleFlags.get(index);
+  }
+
+  public CryptoData getSampleCryptoData(int index) {
+    return cryptoDatas.get(index);
+  }
+
+  public int getSampleCount() {
+    return sampleTimesUs.size();
+  }
+
+  public List<Long> getSampleTimesUs() {
+    return Collections.unmodifiableList(sampleTimesUs);
+  }
+
   public void assertEquals(FakeTrackOutput expected) {
     assertThat(format).isEqualTo(expected.format);
     assertThat(sampleTimesUs).hasSize(expected.sampleTimesUs.size());
@@ -133,7 +162,8 @@ public final class FakeTrackOutput implements TrackOutput, Dumper.Dumpable {
 
   @Override
   public void dump(Dumper dumper) {
-    dumper.startBlock("format")
+    dumper
+        .startBlock("format")
         .add("bitrate", format.bitrate)
         .add("id", format.id)
         .add("containerMimeType", format.containerMimeType)
@@ -152,7 +182,8 @@ public final class FakeTrackOutput implements TrackOutput, Dumper.Dumpable {
         .add("subsampleOffsetUs", format.subsampleOffsetUs)
         .add("selectionFlags", format.selectionFlags)
         .add("language", format.language)
-        .add("drmInitData", format.drmInitData != null ? format.drmInitData.hashCode() : "-");
+        .add("drmInitData", format.drmInitData != null ? format.drmInitData.hashCode() : "-")
+        .add("metadata", format.metadata);
 
     dumper.startBlock("initializationData");
     for (int i = 0; i < format.initializationData.size(); i++) {
